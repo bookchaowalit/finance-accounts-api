@@ -385,7 +385,8 @@ def create_app(
                 execution,
                 {"status": "succeeded", "service": cell.name, **plan.audit},
             )
-        except (PlatformUnavailable, Denied):
+        except (PlatformUnavailable, Denied) as exc:
+            capture(exc)  # the write succeeded; only the audit finish failed
             log.warning(
                 json.dumps(
                     {"event": f"{cell.name}.finish_failed", "execution": str(execution)}
