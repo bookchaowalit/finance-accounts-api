@@ -44,7 +44,8 @@ workspace-scoped, so the same service can serve other tenants without code chang
 - `/v1/accounts`: list (filters `account_type`, `owner_scope`, `status`), stats, get,
   get-by-legacy-id, create (with `Idempotency-Key`), patch (with `expected_version`), delete.
 - Rules: `name` is unique within an `owner_scope` and at most 200 characters; `account_type` and
-  `status` are fixed enums; `currency` defaults to THB; `metadata` is a JSON object.
+  `status` are fixed enums; `currency` defaults to THB; `metadata` is a JSON object; `closed_on`
+  cannot be before `opened_on` (422 `invalid_value`).
 - Deleting an account other records still point at is the caller's responsibility to check in the
   other finance services (cross-service ids are not foreign keys).
 - Out of scope: balances over time (computed from `finance-transactions-api`), bank connections

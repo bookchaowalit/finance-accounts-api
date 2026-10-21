@@ -12,6 +12,8 @@ resources:
     unique:
     - - name
       - owner_scope
+    ranges:
+    - [opened_on, closed_on]
     fields:
       name:
         type: text

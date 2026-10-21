@@ -41,6 +41,7 @@ from typing import Any, Literal
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp_types import Tool as MCPTool
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -52,7 +53,7 @@ from pydantic import (
 )
 
 from cellkit.app import _constraints, _python_type
-from cellkit.spec import Cell, Resource
+from cellkit.spec import Cell, Field, Resource
 
 OPERATIONS = ("list", "get", "create", "update", "delete")
 READ_ONLY = ("list", "get")
@@ -227,7 +228,7 @@ def argument_models(cell: Cell, r: Resource) -> dict[str, type[Strict]]:
                 stacklevel=2,
             )
 
-    def typed(f, *, required: bool):
+    def typed(f: Field, *, required: bool) -> tuple[Any, Any]:
         typ, extra = _python_type(f), _constraints(f)
         if required:
             return (typ, PydanticField(**extra))
@@ -282,7 +283,7 @@ class StrictMCPServer(MCPServer):
         super().__init__(*args, **kwargs)
         self.argument_models: dict[str, type[Strict]] = {}
 
-    async def list_tools(self):  # type: ignore[override]
+    async def list_tools(self) -> list[MCPTool]:
         tools = await super().list_tools()
         for tool in tools:
             model = self.argument_models.get(tool.name)
@@ -295,7 +296,7 @@ class StrictMCPServer(MCPServer):
 
     async def call_tool(
         self, name: str, arguments: dict[str, Any], context: Any = None
-    ):  # type: ignore[override]
+    ) -> Any:
         model = self.argument_models.get(name)
         if model is None:
             raise ToolFailed(f"unknown tool {name}")
@@ -386,8 +387,8 @@ def build_server(
         operation: str,
         model: type[Strict],
         description: str,
-        handler: Callable[[dict], Any],
-    ):
+        handler: Callable[[dict[str, Any]], Any],
+    ) -> None:
         name = tool_name(cell, r, operation)
 
         def function(**kwargs: Any) -> Any:

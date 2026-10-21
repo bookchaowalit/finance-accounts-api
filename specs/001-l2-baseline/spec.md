@@ -1,0 +1,129 @@
+# SPEC-001 — L2 baseline: locked dependencies, strict types, domain rules under test
+
+Standard: ADR-0004 — TDD + SDD (architecture-docs, `docs/architecture/decisions/ADR-0004-tdd-sdd-standard.md`).
+Big Loop Plan Wave 2 (solo-empire `repository-catalog/roadmaps/BIG-LOOP-PLAN-2026-10-21.md`).
+
+## Document control
+
+| Field | Value |
+|---|---|
+| Spec ID / version | SPEC-001 / 1.0 |
+| Status | implemented |
+| Repository / path | bookchaowalit/finance-accounts-api / `specs/001-l2-baseline/spec.md` |
+| Owner (maker) | Claude Code (Wave 2 cells session) |
+| Reviewer (checker) | Fresh Claude reviewer session (no maker context) |
+| Approver | Owner (bookchaowalit): pending, see the Wave 2 report owner actions |
+| Requirement links | Big Loop DoD L2: `PRODUCT.md`, ≥ 3 test files, Sentry, type check; L1 lockfile |
+| Main-only | yes: committed straight to `main`, so the red run is local (ADR-0004 rule 2, v1.1) |
+| Created / approved | 2026-10-22 / pending owner |
+
+## 1. Problem and intent
+
+- **Problem:** Dependencies were installed unpinned (`pip install .`), there was no type check or lint rule set, the only tests were the generic contract suite, and the API stored an account whose `closed_on` is before its `opened_on`.
+- **Outcome:** the image installs exactly `uv.lock` (`uv sync --frozen`), CI runs Ruff, mypy
+  (strict on `src/`) and a coverage gate on shared CI v1.1.1, and the cell's own rules have
+  tests of their own beyond the generic contract suite.
+- **Why now:** Wave 2 of the Big Loop Plan; milestone M1 is 2026-11-15.
+
+## 2. Scope
+
+| In scope | Out of scope (non-goals) |
+|---|---|
+| `uv.lock`, Dockerfile, CI caller bump, Ruff/mypy config and fixes, domain tests, `PRODUCT.md` | New endpoints or fields; database migrations; a shared cellkit package (owner decision 2026-10-21: each service owns its code) |
+
+## 3. Behaviour — scenarios
+
+### AC-01 — An account cannot close before it opened
+
+- **Given** an owner with write permission
+- **When** they create an account with `opened_on` 2026-05-01 and `closed_on` 2026-04-30
+- **Then** the API answers 422 `invalid_value` naming both fields; the same day for both dates is accepted
+- **Test:** `tests/test_account_validation.py::test_an_account_cannot_close_before_it_opened` · level: integration (API + throwaway PostgreSQL)
+
+### AC-02 — Closing before the opening date is refused on update
+
+- **Given** an account opened on 2026-05-01
+- **When** a patch sets `closed_on` to 2026-04-01
+- **Then** the API answers 422 and the stored `closed_on` stays empty; a patch that touches neither date still succeeds
+- **Test:** `tests/test_account_validation.py::test_closing_before_the_opening_date_is_refused_on_update` · level: integration (API + throwaway PostgreSQL)
+
+### AC-03 — Names are unique within an owner scope
+
+- **Given** an account named Cash box in the personal scope
+- **When** another Cash box is created in the same scope, then in the venture scope
+- **Then** the first is refused with 409, the second is created
+- **Test:** `tests/test_account_defaults.py::test_name_is_unique_within_an_owner_scope` · level: integration (API + throwaway PostgreSQL)
+
+### AC-04 — New accounts default to personal, active, THB
+
+- **Given** a create request with only a name and a type
+- **When** the account is created
+- **Then** `owner_scope` is personal, `status` is active, `currency` is THB and `version` is 1
+- **Test:** `tests/test_account_defaults.py::test_new_account_defaults_to_personal_active_thb` · level: integration (API + throwaway PostgreSQL)
+
+### AC-05 — Listing and stats follow the declared filters
+
+- **Given** credit and investment accounts
+- **When** the owner lists by `account_type` and asks for stats grouped by `status` or by a non-filter field
+- **Then** only credit accounts are listed, stats count per status, and grouping by `name` is refused with 422
+- **Test:** `tests/test_account_queries.py` · level: integration (API + throwaway PostgreSQL)
+
+## 4. Interfaces and data
+
+| Interface | Change | Contract |
+|---|---|---|
+| `POST /v1/accounts`, `PATCH /v1/accounts/{id}` | changed | `closed_on` before `opened_on` → `422 {"error": "invalid_value", "fields": ["closed_on", "opened_on"]}` |
+| `cell.yaml` | changed | new resource key `ranges: [[opened_on, closed_on]]` |
+
+- **Data model / migration:** N/A — no schema change. Range rules are checked by the API on
+  create and update; rows already stored are not rewritten.
+- **Backward compatibility:** clients keep the same routes. A write that would store a range
+  ending before it starts now gets `422 invalid_value` instead of `201/200`.
+
+## 5. Non-functional requirements
+
+| NFR | Target | How it is tested |
+|---|---|---|
+| Performance | N/A — no hot-path change beyond one comparison per declared range | — |
+| Security / privacy | Same authorization, RLS and Sentry scrubbing as before | contract suite (`tests/test_contract.py`), `tests/test_sentry.py` |
+| Reliability / observability | Reproducible image from `uv.lock`; failed inline publishes reach Sentry | image rehearsal before push; `test_inline_publish_failure_is_reported` |
+| Accessibility / UX | N/A — API only | — |
+
+## 6. Test plan (TDD)
+
+- **Test levels:** integration tests against the FastAPI app with a throwaway local PostgreSQL
+  (pgserver) and a fake platform; no hosted database or platform.
+- **Test data:** generated in each test; no production data.
+- **Coverage:** CI gate `coverage-threshold: "56"` (measured 58.52% on 2026-10-22, minus 2 points).
+- **Not test-first (exceptions):** tests that pin behaviour the service already had
+  (characterization tests, marked below) were written after the code by nature; tooling and
+  config changes are covered by CI itself.
+
+### Red / green log
+
+| Scenario | Test | Red: commit / run + failure message | Green: commit / run | Refactor note |
+|---|---|---|---|---|
+| AC-01 | `tests/test_account_validation.py::test_an_account_cannot_close_before_it_opened` | 3ec0292 · `.venv/bin/pytest -q tests/test_account_validation.py` · `assert 201 == 422` | CI run of the pushed tip | none |
+| AC-02 | `tests/test_account_validation.py::test_closing_before_the_opening_date_is_refused_on_update` | 3ec0292 · `.venv/bin/pytest -q tests/test_account_validation.py` · `assert 200 == 422` | CI run of the pushed tip | none |
+| AC-03 | `tests/test_account_defaults.py::test_name_is_unique_within_an_owner_scope` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
+| AC-04 | `tests/test_account_defaults.py::test_new_account_defaults_to_personal_active_thb` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
+| AC-05 | `tests/test_account_queries.py` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
+
+## 7. Risks and open questions
+
+| # | Risk or question | Impact | Owner | Resolution / date |
+|---|---|---|---|---|
+| 1 | Stored rows written before a range rule existed may already be inverted | a patch touching one of those dates is refused until both are fixed | owner | patches that do not touch the range still work |
+
+## 8. Change log
+
+| Version | Date | Change | Scenarios affected | Approved by |
+|---|---|---|---|---|
+| 1.0 | 2026-10-22 | Implemented with the Wave 2 baseline | all | pending owner |
+
+## Approval
+
+| Gate | Role | Name / date | Decision | Evidence |
+|---|---|---|---|---|
+| Implemented (DoD) | Reviewer (checker) | Fresh Claude reviewer / 2026-10-22 | see Wave 2 report | CI run of the pushed tip |
+| Implemented (DoD) | Approver | Owner | pending | Wave 2 report |
