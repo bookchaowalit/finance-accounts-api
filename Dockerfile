@@ -10,7 +10,7 @@ COPY pyproject.toml uv.lock README.md cell.yaml ./
 COPY src ./src
 COPY migrations ./migrations
 COPY db ./db
-RUN uv sync --frozen --no-editable --no-cache --python /usr/local/bin/python3 \
+RUN uv sync --frozen --no-dev --no-editable --no-cache --python /usr/local/bin/python3 \
     && useradd --system --uid 10001 --no-create-home cell
 USER cell
 # Secrets (database URLs, public key, publisher token) arrive as environment variables at runtime only.
