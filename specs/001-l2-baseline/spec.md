@@ -8,7 +8,7 @@ Big Loop Plan Wave 2 (solo-empire `repository-catalog/roadmaps/BIG-LOOP-PLAN-202
 | Field | Value |
 |---|---|
 | Spec ID / version | SPEC-001 / 1.0 |
-| Status | implemented |
+| Status | in review (implemented; owner approval pending) |
 | Repository / path | bookchaowalit/finance-accounts-api / `specs/001-l2-baseline/spec.md` |
 | Owner (maker) | Claude Code (Wave 2 cells session) |
 | Reviewer (checker) | Fresh Claude reviewer session (no maker context) |

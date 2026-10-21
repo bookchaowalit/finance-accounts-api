@@ -185,7 +185,8 @@ def range_errors(
 
 
 def _ordered(value: Any) -> Any:
-    # A timestamp sent without an offset is stored as UTC; compare it as UTC too.
+    # A timestamp sent without an offset is read in the session time zone, UTC on the hosted
+    # databases (Neon default); compare it as UTC.
     if isinstance(value, datetime) and value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value
@@ -802,12 +803,13 @@ def create_app(
                             "version": before["version"],
                         },
                     )
-                if bad := range_errors(r, {**before, **requested}, set(requested)):
+                data = changed(r, before, requested)
+                # Only pairs this patch really changes: resending stored values is never refused.
+                if bad := range_errors(r, {**before, **data}, set(data)):
                     raise HTTPException(
                         status_code=422,
                         detail={"error": "invalid_value", "fields": bad},
                     )
-                data = changed(r, before, requested)
                 if not data:
                     return Plan(
                         f"{cell.name}.{r.name}:write",

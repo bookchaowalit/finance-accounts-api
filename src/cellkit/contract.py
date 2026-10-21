@@ -394,7 +394,9 @@ def test_inline_publish_failure_is_reported(
         )
     )
     make(client, owner, cell, r)
-    assert [type(exc) for exc in captured] == [RuntimeError]
+    # One capture per write that publishes (make() also creates the records it refers to).
+    assert captured
+    assert {type(exc) for exc in captured} == {RuntimeError}
 
 
 _LOW_HIGH: dict[str, tuple[Any, Any]] = {
@@ -430,6 +432,14 @@ def test_ranges_keep_start_before_end(client, owner, harness, resource):
         moved = client.patch(path, headers=owner, json={start: high, end: low})
         assert moved.status_code == 422, moved.text
         assert client.get(path, headers=owner).json()["version"] == 2
+        # A row stored before the rule existed may already be inverted: resending its own values
+        # (a no-op) is accepted, only a patch that changes a range field is checked.
+        harness.superuser(
+            f"UPDATE {cell.schema}.{r.table} SET {start} = %s, {end} = %s WHERE id = %s RETURNING id",
+            (high, low, record["id"]),
+        )
+        resent = client.patch(path, headers=owner, json={start: high, end: low})
+        assert resent.status_code == 200, resent.text
 
 
 def test_spec_refuses_bad_ranges():
