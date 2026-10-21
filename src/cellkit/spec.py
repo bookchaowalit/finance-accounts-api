@@ -85,6 +85,13 @@ class Field:
     def nullable(self) -> bool:
         return not self.required and self.default is None
 
+    @property
+    def target(self) -> str:
+        """The resource a ref points at; the spec loader has checked that it exists."""
+        if self.to is None:
+            raise SpecError(f"{self.name}: not a ref field")
+        return self.to
+
 
 @dataclass(frozen=True)
 class Resource:

@@ -67,7 +67,9 @@ def make(
     refs = {}
     for f in r.refs:
         if (f.required or everything) and f.to != r.name and f.name not in extra:
-            refs[f.to] = make(client, headers, cell, cell.resource(f.to), n)["id"]
+            refs[f.target] = make(client, headers, cell, cell.resource(f.target), n)[
+                "id"
+            ]
     payload = {**body(r, refs, n, everything=everything), **extra}
     response = client.post(f"/v1/{r.plural}", json=payload, headers=headers)
     assert response.status_code == 201, response.text

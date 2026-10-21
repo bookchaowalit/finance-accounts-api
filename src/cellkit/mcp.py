@@ -218,7 +218,6 @@ def bearer(environ: Any = None) -> str:
 def argument_models(cell: Cell, r: Resource) -> dict[str, type[Strict]]:
     """Strict argument model per operation, derived from the resource's fields."""
     name = "".join(part.title() for part in r.name.split("-"))
-    cfg = {"__base__": Strict}
 
     exposed = tuple(f for f in r.fields if f.name not in IDENTITY_NAMES)
     for f in r.fields:
@@ -244,38 +243,28 @@ def argument_models(cell: Cell, r: Resource) -> dict[str, type[Strict]]:
         "offset": (int, PydanticField(default=0, ge=0)),
         "order": (Literal["asc", "desc"], PydanticField(default="asc")),
     }
-    ident = {"id": (int, PydanticField(gt=0))}
+    ident: dict[str, Any] = {"id": (int, PydanticField(gt=0))}
+    create_fields: dict[str, Any] = {
+        f.name: typed(f, required=f.required and f.default is None) for f in exposed
+    }
+    # A resource may already own a field called idempotency_key (it is then sent in the
+    # body and reused as the header); otherwise the tool adds an optional retry key.
+    if not any(f.name == "idempotency_key" for f in exposed):
+        create_fields["idempotency_key"] = (
+            str | None,
+            PydanticField(default=None, pattern=IDEMPOTENCY_KEY),
+        )
+    update_fields: dict[str, Any] = {
+        **ident,
+        "expected_version": (int | None, PydanticField(default=None, ge=1)),
+        **{f.name: typed(f, required=False) for f in exposed},
+    }
     return {
-        "list": create_model(f"{name}List", **cfg, **list_fields),
-        "get": create_model(f"{name}Ref", **cfg, **ident),
-        "create": create_model(
-            f"{name}Create",
-            **cfg,
-            **{
-                f.name: typed(f, required=f.required and f.default is None)
-                for f in exposed
-            },
-            # A resource may already own a field called idempotency_key (it is then sent in the
-            # body and reused as the header); otherwise the tool adds an optional retry key.
-            **(
-                {}
-                if any(f.name == "idempotency_key" for f in exposed)
-                else {
-                    "idempotency_key": (
-                        str | None,
-                        PydanticField(default=None, pattern=IDEMPOTENCY_KEY),
-                    )
-                }
-            ),
-        ),
-        "update": create_model(
-            f"{name}Update",
-            **cfg,
-            **ident,
-            expected_version=(int | None, PydanticField(default=None, ge=1)),
-            **{f.name: typed(f, required=False) for f in exposed},
-        ),
-        "delete": create_model(f"{name}Delete", **cfg, **ident),
+        "list": create_model(f"{name}List", __base__=Strict, **list_fields),
+        "get": create_model(f"{name}Ref", __base__=Strict, **ident),
+        "create": create_model(f"{name}Create", __base__=Strict, **create_fields),
+        "update": create_model(f"{name}Update", __base__=Strict, **update_fields),
+        "delete": create_model(f"{name}Delete", __base__=Strict, **ident),
     }
 
 
@@ -405,14 +394,9 @@ def build_server(
             checked = model.model_validate(sent.get())
             # list drops unset filters; the others send exactly what the caller set (null clears a field).
             return handler(
-                checked.model_dump(
-                    mode="json",
-                    **(
-                        {"exclude_none": True}
-                        if operation == "list"
-                        else {"exclude_unset": True}
-                    ),
-                )
+                checked.model_dump(mode="json", exclude_none=True)
+                if operation == "list"
+                else checked.model_dump(mode="json", exclude_unset=True)
             )
 
         function.__name__ = name.replace(".", "_").replace("-", "_")
@@ -427,7 +411,7 @@ def build_server(
         base = f"/v1/{r.plural}"
         what = r.name.replace("-", " ")
         operations = READ_ONLY if read_only else OPERATIONS
-        handlers: dict[str, tuple[str, Callable[[dict], Any]]] = {
+        handlers: dict[str, tuple[str, Callable[..., Any]]] = {
             "list": (
                 f"List {what} records in the caller's workspace, filtered by {', '.join(r.filters) or 'nothing'}.",
                 lambda a, base=base: call("GET", base, params=a),

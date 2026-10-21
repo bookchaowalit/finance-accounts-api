@@ -188,7 +188,7 @@ def out(row: dict[str, Any]) -> dict[str, Any]:
 class Work:
     """One write's open local transaction; ``marker`` tags its outbox rows until the execution exists."""
 
-    conn: psycopg.Connection
+    conn: psycopg.Connection[Any]
     marker: uuid.UUID
     caller: Principal
 
@@ -222,7 +222,7 @@ class Context:
 
 def create_app(
     cell: Cell,
-    connect: Callable[[], psycopg.Connection],
+    connect: Callable[[], psycopg.Connection[Any]],
     verifier: TokenVerifier,
     platform: Platform,
     publisher_token: Callable[[], str | None] = lambda: None,
@@ -259,7 +259,7 @@ def create_app(
     Caller = Annotated[Principal, Depends(principal)]
 
     @contextmanager
-    def bound(caller: Principal) -> Iterator[psycopg.Connection]:
+    def bound(caller: Principal) -> Iterator[psycopg.Connection[Any]]:
         try:
             conn = connect()
         except psycopg.OperationalError as exc:
@@ -465,7 +465,11 @@ def create_app(
         background.add_task(run)
 
     def load(
-        conn: psycopg.Connection, r: Resource, record_id: int, *, lock: bool = False
+        conn: psycopg.Connection[Any],
+        r: Resource,
+        record_id: int,
+        *,
+        lock: bool = False,
     ) -> dict[str, Any]:
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query -- table/column names are module constants or spec-validated identifiers; values are bound as %s parameters
         row = conn.execute(
@@ -495,6 +499,7 @@ def create_app(
                 (caller.actor, r.name, key),
             ).fetchone()
             conn.commit()
+        assert row is not None  # the INSERT above or an earlier request created it
         return int(row["record_id"])
 
     def where(r: Resource, query: Any) -> tuple[list[str], list[Any]]:
@@ -652,22 +657,24 @@ def create_app(
 
         @app.post(f"/v1/{r.plural}", status_code=201, name=f"create_{r.name}")
         def create(
-            body: create_body,
+            body: create_body,  # type: ignore[valid-type]  # model built from cell.yaml at startup
             caller: Caller,
-            background: BackgroundTasks,  # type: ignore[valid-type]
+            background: BackgroundTasks,
             idempotency_key: Annotated[str | None, Header()] = None,
         ):
+            # The body model is built from cell.yaml at startup, so mypy cannot see its fields.
+            sent: Any = body
             data = {
                 k: v
-                for k, v in values(r, body, body.model_fields_set).items()
+                for k, v in values(r, sent, sent.model_fields_set).items()
                 if v is not None
             }
             stamps = {
-                k: getattr(body, k)
+                k: getattr(sent, k)
                 for k in ("created_at", "updated_at")
-                if getattr(body, k) is not None
+                if getattr(sent, k) is not None
             }
-            if stamps and body.legacy_id is None:
+            if stamps and sent.legacy_id is None:
                 raise HTTPException(
                     status_code=422,
                     detail={"error": "invalid_value", "fields": sorted(stamps)},
@@ -677,7 +684,7 @@ def create_app(
             # An import keeps its old id (legacy_id); a retried import then conflicts instead of duplicating.
             reserved = (
                 reserve(caller, r, idempotency_key)
-                if idempotency_key and body.legacy_id is None
+                if idempotency_key and sent.legacy_id is None
                 else None
             )
 
@@ -699,13 +706,13 @@ def create_app(
                     ["workspace_id", *row_data],
                     [caller.workspace, *row_data.values()],
                 )
-                if body.legacy_id is not None:
+                if sent.legacy_id is not None:
                     columns.append("legacy_id")
-                    params.append(body.legacy_id)
+                    params.append(sent.legacy_id)
                     for name, value in stamps.items():
                         columns.append(name)
                         params.append(value)
-                record_id = body.legacy_id if body.legacy_id is not None else reserved
+                record_id = sent.legacy_id if sent.legacy_id is not None else reserved
                 if record_id is not None:
                     columns.append("id")
                     params.append(record_id)
@@ -714,6 +721,7 @@ def create_app(
                     f" RETURNING {r.select}",
                     params,
                 ).fetchone()
+                assert row is not None  # INSERT ... RETURNING always returns the row
                 return Plan(
                     f"{cell.name}.{r.name}:write",
                     str(row["id"]),
@@ -735,17 +743,19 @@ def create_app(
         @app.patch(f"/v1/{r.plural}/{{record_id}}", name=f"update_{r.name}")
         def update(
             record_id: int,
-            body: update_body,
-            caller: Caller,  # type: ignore[valid-type]
+            body: update_body,  # type: ignore[valid-type]  # model built from cell.yaml at startup
+            caller: Caller,
             background: BackgroundTasks,
         ):
-            requested = values(r, body, body.model_fields_set - {"expected_version"})
+            # The body model is built from cell.yaml at startup, so mypy cannot see its fields.
+            sent: Any = body
+            requested = values(r, sent, sent.model_fields_set - {"expected_version"})
 
             def op(work: Work) -> Plan:
                 before = load(work.conn, r, record_id, lock=True)
                 if (
-                    body.expected_version is not None
-                    and before["version"] != body.expected_version
+                    sent.expected_version is not None
+                    and before["version"] != sent.expected_version
                 ):
                     raise HTTPException(
                         status_code=409,

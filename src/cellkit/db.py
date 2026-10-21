@@ -26,6 +26,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg import sql
@@ -147,7 +148,7 @@ class LocalCluster:
 
     def connect(
         self, role: str, dbname: str | None = None, **kwargs
-    ) -> psycopg.Connection:
+    ) -> psycopg.Connection[Any]:
         return psycopg.connect(
             f"host={self.socket_dir} port={PORT} user={role} dbname={dbname or self.names.database}",
             **kwargs,
@@ -203,7 +204,7 @@ class HostedCluster:
 
     def connect(
         self, role: str, dbname: str | None = None, **kwargs
-    ) -> psycopg.Connection:
+    ) -> psycopg.Connection[Any]:
         key = self.names.short(role)
         if key not in self.urls:
             raise SystemExit(
@@ -233,7 +234,7 @@ def migrate(cluster: LocalCluster | HostedCluster) -> list[str]:
             " name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())"
         )
         conn.commit()
-        done = dict(
+        done: dict[str, str] = dict(
             conn.execute("SELECT name, sha256 FROM public.schema_migrations").fetchall()
         )
         files = sorted(names.migrations.glob("*.sql"))
