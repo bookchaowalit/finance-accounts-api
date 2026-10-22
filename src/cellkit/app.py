@@ -29,6 +29,7 @@ import importlib
 import json
 import logging
 import math
+import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
@@ -905,8 +906,9 @@ def create_app(
             publish_soon(background, caller)
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, str | None]:
+        # Railway sets the SHA on deploys from the GitHub source; the CD smoke test compares it.
+        return {"status": "ok", "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA")}
 
     if (
         cell.extend

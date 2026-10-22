@@ -29,6 +29,7 @@ Commits touching `src/cellkit/` or `cell.yaml`:
 | Inline publish failure → Sentry | no: no resource has graph events, so the inline publisher never runs. The line is in the copy but inert. | — |
 | `ranges` rule | yes: `account` opened_on..closed_on | 3ec0292 · `.venv/bin/pytest -q tests/test_account_validation.py` · `assert 201 == 422` |
 | Column limits / finite reals | yes: `account.opening_balance` | 1bd0740 · `.venv/bin/pytest -q -k numbers_fit` · `AssertionError: ('opening_balance', 'NaN', ...)` (201, stored as null) |
+| `/health` names the running commit (`RAILWAY_GIT_COMMIT_SHA`) | yes: this cell is the CD pilot; the post-deploy smoke test compares it ([runbook](runbooks/cd-pilot.md)). Other cells add it when they move to CD | `tests/test_health.py` (red first, 2026-10-23) |
 
 ## Deliberately not applied
 
