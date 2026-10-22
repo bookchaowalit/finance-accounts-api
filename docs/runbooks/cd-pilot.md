@@ -7,10 +7,14 @@ pilot has deployed cleanly.
 
 ## Why
 
-The Railway service deploys from GitHub `main` with "Wait for CI" (`checkSuites: true`). Railway
-waits for **every** check suite on the commit, and ten GitHub apps installed on the account
-(Vercel, Render, Smithery, GitGuardian, …) leave theirs `queued` forever, so no push has deployed
-since 2026-10-18: production runs `c267efd`, `main` is 8 commits ahead (2026-10-23).
+The Railway service deploys from GitHub `main` with "Wait for CI" (`checkSuites: true`). From
+2026-10-18 to 2026-10-22 no push deployed: ten GitHub apps installed on the account leave their
+check suites `queued` forever, and Railway waited for them. **Update 2026-10-23:** Railway deploys
+again since 2026-10-22 09:23 UTC although those suites are still `queued` (checked on `594e02f`);
+the push of this runbook deployed `594e02f` by Railway's own trigger (`/health` reports it). So
+the pilot is no longer needed to unblock deploys; what it still adds over Railway's trigger is the
+post-deploy smoke test with a commit check and a rollback hint in CI, and independence from
+Railway's handling of other apps' check suites. The owner decides whether to go ahead.
 
 With CD in GitHub Actions, the `deploy` job in `.github/workflows/ci.yml` runs only after the `api`
 and `security` jobs pass on `main`, asks Railway to build exactly that commit from the GitHub source
@@ -25,7 +29,7 @@ red with the rollback command for the last good deployment.
 | Railway project / environment / service | `f4781a08-96ca-4965-b12f-09aeb8de6aae` / production `6ea4583c-ec3b-4e87-a2c1-d571a38e15b9` / `99890e22-3638-457f-aed0-af23190b28f0` |
 | Source | GitHub `bookchaowalit/finance-accounts-api` |
 | Branch trigger (the auto-deploy) | `bd25e2f0-fe4b-4d73-be8b-e7510f9f02b8`: branch `main`, `checkSuites: true` |
-| Live deployment | `026b7b4f-6bec-4fa6-b37d-d7bb1ac1ec36`, `SUCCESS`, commit `c267efd` (2026-10-18) |
+| Live deployment | `SUCCESS`, commit `594e02f` (2026-10-22 19:16 UTC, by the branch trigger); before that `c267efd` (2026-10-18) |
 | Health | `https://finance-accounts-api-production.up.railway.app/health` → 200 |
 | `deploy` job | in CI, off: runs only when the repository variable `CD_DEPLOY` is `true` |
 
@@ -36,11 +40,8 @@ later `railway config apply` does not put the trigger back.
 
 ## What ships on the first deploy
 
-`main` is ahead of production by these commits (all CI-green; two are bug fixes with tests):
-`b67f82e` L2 baseline (locked deps, mypy, domain tests), `3d32b83` `--no-dev` image, `3ec0292`/`fe5ddc9`
-refuse an account that closes before it opens, `ecc8da2` range check only when the patch changes it,
-`1bd0740`/`cbc06f1` refuse out-of-range integers and NaN/Infinity with 422, `89e1714` docs, and the
-`/health` commit field plus this runbook.
+Nothing new: production already runs `main` (`594e02f`). The first CD run redeploys the same commit
+and proves the path (build, wait, commit check, smoke test).
 
 ## Steps (after the owner's OK)
 
@@ -62,7 +63,7 @@ refuse an account that closes before it opens, `ecc8da2` range check only when t
    ```
 
    Expect no triggers and `source.repo = bookchaowalit/finance-accounts-api`. Nothing is deployed by
-   this step; production keeps running `c267efd`.
+   this step; production keeps running what it runs.
 
 3. **IaC (same day, commit on `main`).** In `.railway/railway.ts` remove `branch: "main",` and
    `checkSuites: true,` from the `github` source and change the comment to "Railway builds from this
