@@ -68,6 +68,13 @@ Big Loop Plan Wave 2 (solo-empire `repository-catalog/roadmaps/BIG-LOOP-PLAN-202
 - **Then** only credit accounts are listed, stats count per status, and grouping by `name` is refused with 422
 - **Test:** `tests/test_account_queries.py` · level: integration (API + throwaway PostgreSQL)
 
+### AC-06 — Numbers fit their columns
+
+- **Given** the real field `opening_balance`
+- **When** a client sends NaN, Infinity or 1e400 as raw JSON
+- **Then** the API answers 422 naming the field (before: 201 with the value stored as null)
+- **Test:** `tests/test_contract.py::test_numbers_fit_their_columns` · level: integration (API + throwaway PostgreSQL)
+
 ## 4. Interfaces and data
 
 | Interface | Change | Contract |
@@ -108,6 +115,7 @@ Big Loop Plan Wave 2 (solo-empire `repository-catalog/roadmaps/BIG-LOOP-PLAN-202
 | AC-03 | `tests/test_account_defaults.py::test_name_is_unique_within_an_owner_scope` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
 | AC-04 | `tests/test_account_defaults.py::test_new_account_defaults_to_personal_active_thb` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
 | AC-05 | `tests/test_account_queries.py` | characterization (behaviour already present; passed on first run) | CI run of the pushed tip | none |
+| AC-06 | `tests/test_contract.py::test_numbers_fit_their_columns` | 1bd0740 · `.venv/bin/pytest -q -k numbers_fit` · `AssertionError: ('opening_balance', 'NaN', ...)` (201, stored as null) | CI run of the pushed tip | none |
 
 ## 7. Risks and open questions
 
