@@ -27,18 +27,20 @@ jobs:
   security:
     uses: bookchaowalit/platform-ci-workflows/.github/workflows/security.yml@87dc5e1c7e0416886a6371d5a101bb2ccba38edd # v1.1.1
 
-  # CD pilot (ADR-0003 / D3, platform-ci-workflows v1.2.0): after CI passes on main, deploy this exact
-  # commit from Railway's GitHub source and smoke-test it. Off until the owner sets the repository
-  # variable CD_DEPLOY=true, after the steps in docs/runbooks/cd-pilot.md.
+  # CD pilot, verify mode (ADR-0003 addendum A1, platform-ci-workflows v1.3.0): Railway still deploys
+  # by itself from its branch trigger; after CI passes on main this job waits for Railway's deployment
+  # of this commit, checks it, smoke-tests /health and prints the rollback command on failure. Read-only.
+  # Off until the owner adds the RAILWAY_TOKEN secret and sets CD_DEPLOY=true (docs/runbooks/cd-pilot.md).
   deploy:
     needs: [api, security]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.CD_DEPLOY == 'true'
-    uses: bookchaowalit/platform-ci-workflows/.github/workflows/deploy-railway.yml@77c996e8047846c6355ef2acdf08177bf22fd8e6 # v1.2.0
+    uses: bookchaowalit/platform-ci-workflows/.github/workflows/deploy-railway.yml@761fd15ea2dae8de85c91def17814031b60987bf # v1.3.0
     with:
       service-id: 99890e22-3638-457f-aed0-af23190b28f0
       environment-id: 6ea4583c-ec3b-4e87-a2c1-d571a38e15b9
       health-url: https://finance-accounts-api-production.up.railway.app/health
       health-expect: '"status":"ok"'
       commit-url: https://finance-accounts-api-production.up.railway.app/health
+      mode: verify
     secrets:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
