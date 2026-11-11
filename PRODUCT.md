@@ -19,7 +19,7 @@ api
 ## Product Purpose
 
 The single list of places where money is held or owed: bank, cash, wallet, payment, credit,
-investment and receivable accounts, per owner scope (personal, solo_empire, venture, client,
+investment and receivable accounts, per workspace-defined scope label (formerly personal, solo_empire, venture, client,
 shared). Every other finance service refers to an account here instead of keeping its own copy.
 
 Success: each real account exists once, other finance services resolve every `account_id` they
@@ -41,9 +41,13 @@ workspace-scoped, so the same service can serve other tenants without code chang
 
 ## Capabilities and Constraints
 
-- `/v1/accounts`: list (filters `account_type`, `owner_scope`, `status`), stats, get,
+- SPEC-003: amounts are exact `money` (`numeric(19,4)`) and quantities, unit prices and rates are
+  `decimal` (`numeric(30,10)`); both are JSON strings in responses (`"1234.5600"`). Currency fields
+  are ISO 4217 codes (three upper-case letters). `scope` is a free label the workspace defines (at
+  most 64 characters, default empty).
+- `/v1/accounts`: list (filters `account_type`, `scope`, `status`), stats, get,
   get-by-legacy-id, create (with `Idempotency-Key`), patch (with `expected_version`), delete.
-- Rules: `name` is unique within an `owner_scope` and at most 200 characters; `account_type` and
+- Rules: `name` is unique within a `scope` and at most 200 characters; `account_type` and
   `status` are fixed enums; `currency` defaults to THB; `metadata` is a JSON object; `closed_on`
   cannot be before `opened_on` (422 `invalid_value`).
 - Deleting an account other records still point at is the caller's responsibility to check in the

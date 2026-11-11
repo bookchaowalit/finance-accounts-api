@@ -1,17 +1,17 @@
 # Finance accounts cell: one of the ten finance services split from the retired finance_* tables (2026-10-12).
 # Bank, cash, wallet, credit and investment accounts. Other finance cells point at an account by its id (account_id).
-# Amounts are real (float) like every kit cell; cross-cell ids (account_id, ...) are plain bigints, not foreign keys.
+# Amounts are exact (money = numeric(19,4), decimal = numeric(30,10); SPEC-003); cross-cell ids (account_id, ...) are plain bigints, not foreign keys.
 cell: finance-accounts
 title: Finance accounts
 resources:
   account:
     filters:
     - account_type
-    - owner_scope
+    - scope
     - status
     unique:
     - - name
-      - owner_scope
+      - scope
     ranges:
     - [opened_on, closed_on]
     fields:
@@ -31,21 +31,15 @@ resources:
         - receivable
         - other
         required: true
-      owner_scope:
-        type: enum
-        values:
-        - personal
-        - solo_empire
-        - venture
-        - client
-        - shared
-        default: personal
+      scope:
+        type: text
+        max_length: 64
+        default: ''
       institution:
         type: text
       currency:
-        type: text
+        type: currency
         default: THB
-        max_length: 12
       status:
         type: enum
         values:
@@ -55,7 +49,7 @@ resources:
         - closed
         default: active
       opening_balance:
-        type: real
+        type: money
       opened_on:
         type: date
       closed_on:

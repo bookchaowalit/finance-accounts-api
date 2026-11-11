@@ -36,6 +36,7 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal
 
 import psycopg
@@ -62,7 +63,7 @@ from cellkit._sentry import capture
 from cellkit.auth import Principal, TokenVerifier, Unauthenticated
 from cellkit.platform import Action, Denied, Platform, PlatformUnavailable
 from cellkit.publisher import publish_pending
-from cellkit.spec import LEGACY_LIMIT, Cell, Field, Resource
+from cellkit.spec import LEGACY_LIMIT, NUMERIC, Cell, Field, Resource
 
 correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "correlation_id", default=""
@@ -94,6 +95,9 @@ def _python_type(f: Field) -> Any:
         "bigint": int,
         "ref": int,
         "real": float,
+        "money": Decimal,
+        "decimal": Decimal,
+        "currency": str,
         "bool": bool,
         "date": date,
         "timestamp": datetime,
@@ -135,6 +139,19 @@ def _constraints(f: Field) -> dict[str, Any]:
     if f.type == "real":
         # JSON NaN/Infinity (or 1e400) would be stored as NULL, even in a required field.
         out["allow_inf_nan"] = False
+    if f.type in NUMERIC:
+        # Exact: refuse more decimal places than the column keeps (no silent rounding), NaN/Infinity,
+        # and whole numbers past the column (a 422, not a numeric overflow 500).
+        precision, scale = NUMERIC[f.type]
+        top = Decimal(10) ** (precision - scale) - Decimal(10) ** -scale
+        out["decimal_places"] = scale
+        out["allow_inf_nan"] = False
+        floor = Decimal(str(f.min)) if f.min is not None else -top
+        ceiling = Decimal(str(f.max)) if f.max is not None else top
+        out["ge"] = max(floor, -top)
+        out["le"] = min(ceiling, top)
+    if f.type == "currency":
+        out["pattern"] = r"^[A-Z]{3}$"
     if f.type == "ref":
         out["gt"] = 0
     return out
@@ -173,6 +190,11 @@ def coerce(f: Field | None, raw: str, name: str) -> Any:
             return int(raw)
         if f.type == "real":
             return float(raw)
+        if f.type in NUMERIC:
+            number = Decimal(raw)
+            if not number.is_finite():
+                raise ValueError(raw)
+            return number
         if f.type == "bool":
             if raw not in ("true", "false"):
                 raise ValueError(raw)
@@ -184,7 +206,7 @@ def coerce(f: Field | None, raw: str, name: str) -> Any:
         if f.type == "enum" and raw not in f.values:
             raise ValueError(raw)
         return raw
-    except ValueError:
+    except (ValueError, InvalidOperation):
         raise HTTPException(
             status_code=422, detail={"error": "invalid_value", "fields": [name]}
         ) from None
@@ -215,6 +237,8 @@ def _ordered(value: Any) -> Any:
 def _json_safe(value: Any) -> Any:
     if isinstance(value, float) and not math.isfinite(value):
         return str(value)
+    if isinstance(value, Decimal):
+        return str(value)
     if isinstance(value, dict):
         return {k: _json_safe(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
@@ -231,7 +255,8 @@ def row_hash(row: dict[str, Any] | None) -> str | None:
 
 
 def out(row: dict[str, Any]) -> dict[str, Any]:
-    encoded: dict[str, Any] = jsonable_encoder(row)
+    # Exact numbers leave as strings ("12.5000"); the default encoder would turn them into floats.
+    encoded: dict[str, Any] = jsonable_encoder(row, custom_encoder={Decimal: str})
     return encoded
 
 

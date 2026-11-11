@@ -8,18 +8,18 @@ def test_new_account_defaults_to_personal_active_thb(client, owner):
     assert response.status_code == 201, response.text
     account = response.json()
     assert account["currency"] == "THB"
-    assert account["owner_scope"] == "personal"
+    assert account["scope"] == ""
     assert account["status"] == "active"
     assert account["version"] == 1
 
 
-def test_name_is_unique_within_an_owner_scope(client, owner):
+def test_name_is_unique_within_a_scope(client, owner):
     assert create(client, owner, name="Cash box").status_code == 201
     assert create(client, owner, name="Cash box").status_code == 409
-    other_scope = create(client, owner, name="Cash box", owner_scope="venture")
+    other_scope = create(client, owner, name="Cash box", scope="venture")
     assert other_scope.status_code == 201, other_scope.text
 
 
 def test_opening_balance_keeps_its_decimal_value(client, owner):
     account = create(client, owner, name="Float check", opening_balance=1234.56).json()
-    assert account["opening_balance"] == 1234.56
+    assert account["opening_balance"] == "1234.5600"
