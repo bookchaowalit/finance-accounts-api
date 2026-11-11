@@ -31,6 +31,7 @@ Commits touching `src/cellkit/` or `cell.yaml`:
 | Column limits / finite reals | yes: `account.opening_balance` | 1bd0740 · `.venv/bin/pytest -q -k numbers_fit` · `AssertionError: ('opening_balance', 'NaN', ...)` (201, stored as null) |
 | `/health` names the running commit (`RAILWAY_GIT_COMMIT_SHA`) | yes: this cell is the CD pilot; the post-deploy smoke test (verify mode) compares it ([runbook](runbooks/cd-pilot.md)). Other cells add it when they move to CD | `tests/test_health.py` (red first, 2026-10-23) |
 | Security review P3s (2026-11-11): import with `legacy_id` needs `<cell>.<resource>:admin` (it picks the id and may backdate timestamps; the owner grants it only for an import), a PDP 403 is a 403 not a 503, no `/docs`/`/redoc` pages (`/openapi.json` stays public) | yes: shared cellkit, same in all ten finance cells | `.venv/bin/pytest -q -k 'needs_admin or docs_pages or platform_refusal'` · red without the fix: 4 failed |
+| SPEC-009 (2026-11-11): a PATCH that sends a `money` field without `expected_version` gets 428 `version_required` (fields, current version); other PATCHes unchanged | yes: shared cellkit, same in all ten finance cells | `.venv/bin/pytest -q -k money_patch` · red before the change: `assert 200 == 428` |
 
 ## Deliberately not applied
 
