@@ -12,8 +12,9 @@
   Cell-specific code lives in `src/solo_finance_accounts/`.
 - This is one of the ten finance services (finance-accounts, transactions, budgets, cash-flow,
   reconciliations, business-assets, investments, liabilities, subscriptions, tax). Ids that point into
-  another finance service (`account_id`, ...) are plain numbers, not foreign keys; resolve them through that
-  service's API.
+  another finance service (`account_id`, `subscription_id`) are checked on write against event-fed copies
+  (SPEC-006: `references` in cell.yaml, tables `ref_targets`/`ref_sources`); a referenced account or
+  subscription cannot be deleted. `project_id`/`goal_id` (outside finance) stay unchecked.
 - `finance-accounts-mcp` (stdio, see `.mcp.json`) is this cell's MCP server: tools `finance-accounts.<resource>.list|get|create|update|delete`
   call the cell API with the caller's token (`EMPIRE_TOKEN`, `EMPIRE_TOKEN_FILE` or the `owner-mcp` automation token;
   URL from `EMPIRE_FINANCE_ACCOUNTS_API`). Set `EMPIRE_MCP_READONLY=1` for list/get only. Never add actor, workspace or token arguments.

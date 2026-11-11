@@ -5,6 +5,13 @@ cell: finance-accounts
 title: Finance accounts
 resources:
   account:
+    # SPEC-006: fields of other cells that point here (a referenced record cannot be deleted).
+    referenced_by:
+    - transactions.transaction.account_id
+    - investments.investment.account_id
+    - liabilities.liability.account_id
+    - reconciliations.reconciliation.account_id
+    - subscriptions.subscription.account_id
     # SPEC-005: reference data only in events (no amounts, names or notes).
     graph: [account_type, scope, currency, status, opened_on, closed_on]
     legacy_columns:
