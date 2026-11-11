@@ -5,6 +5,8 @@ cell: finance-accounts
 title: Finance accounts
 resources:
   account:
+    # SPEC-005: reference data only in events (no amounts, names or notes).
+    graph: [account_type, scope, currency, status, opened_on, closed_on]
     legacy_columns:
       scope: owner_scope
     filters:
