@@ -12,7 +12,15 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from cellkit import gateway as gw
-from cellkit.gateway import GatewayCheck, check, expected, install, is_open
+from cellkit.gateway import (
+    MAX_BODY_BYTES,
+    GatewayCheck,
+    body_too_big,
+    check,
+    expected,
+    install,
+    is_open,
+)
 
 # Pinned vectors made by the gateway's reference (book_api_gateway.assertion.sign) from the public
 # test master bytes(range(32)) for system "habits"; the same vectors are pinned in life-habits-api.
@@ -256,3 +264,35 @@ def test_the_api_installs_the_check_for_this_cell(monkeypatch):
     assert seen["app"] == "app-sentinel"
     assert seen["ran"] == "app-sentinel"
     assert seen["check"] == GatewayCheck(spec.name, "report", KEY)
+
+
+def test_a_body_the_gateway_could_not_send_is_never_read():
+    assert not body_too_big(None, None)
+    assert not body_too_big("0", None)
+    assert not body_too_big(str(MAX_BODY_BYTES), None)
+    assert body_too_big(str(MAX_BODY_BYTES + 1), None)
+    assert body_too_big("-1", None)
+    assert body_too_big("12x", None)
+    assert body_too_big(None, "chunked")
+
+
+def test_a_forged_header_with_a_big_body_is_refused_unread(monkeypatch):
+    client = make_app("enforce")
+    reads = []
+    original = Request.body
+
+    async def counting_body(self):
+        reads.append(1)
+        return await original(self)
+
+    monkeypatch.setattr(Request, "body", counting_body)
+    body = b"x" * (MAX_BODY_BYTES + 1)
+    header = signed("POST", "/v1/items", content_type="application/json", body=body)
+    headers = {
+        "Authorization": "Bearer t",
+        "Content-Type": "application/json",
+        "X-Gateway-Assertion": header,
+    }
+    refused = client.post("/v1/items", content=body, headers=headers)
+    assert refused.status_code == 403
+    assert reads == []
