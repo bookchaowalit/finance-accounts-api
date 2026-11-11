@@ -5,6 +5,8 @@ cell: finance-accounts
 title: Finance accounts
 resources:
   account:
+    legacy_columns:
+      scope: owner_scope
     filters:
     - account_type
     - scope
